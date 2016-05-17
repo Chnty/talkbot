@@ -14,7 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from google.appengine.api import urlfetch
 import webapp2
+from urllib2 import urlopen
+from urllib import urlencode
+
+TOKEN = open('bot.token').read()
+BASE_URL = 'https://api.telegram.org/bot' + TOKEN + '/'
+
+class SetWebHookHandler(webapp2.RequestHandler):
+    def get(self):
+        urlfetch.set_default_fetch_deadline(60)
+        url = self.request.get('url')
+        if url:
+            self.response.write(json.dumps(json.load(urlopen(BASE_URL + 'setWebhook', urlencode({'url': url})))))
 
 class MainHandler(webapp2.RequestHandler):
     def get(self):
