@@ -25,10 +25,10 @@ class Phrase(ndb.Model):
 
 #Start of Methods
 
-def addPhrase(phrase):
+def add_phrase(phrase):
     Phrase(phrase=phrase, count=1, date=datetime.now(), firstPoster=0).put()
 
-def choosePhrase():
+def choose_phrase():
     allphrase = Phrase.query().fetch()
     answer = ""
     leng = 1
