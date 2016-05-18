@@ -106,7 +106,7 @@ class WebHookHandler(webapp2.RequestHandler):
             elif text == '/help':
                 reply('nope')
             elif text == '/tell':
-                reply(choosePhrase())
+                reply(choose_phrase())
             else:
                 reply('What command?')
 
@@ -118,7 +118,7 @@ class WebHookHandler(webapp2.RequestHandler):
             reply("I am here to serve, oh my great Master!")
         else:
             #reply("I will remember")
-            addPhrase(textE)
+            add_phrase(textE)
             logging.info('not enabled for chat_id {}'.format(chat_id))
 
 app = webapp2.WSGIApplication([
