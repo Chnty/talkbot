@@ -16,8 +16,8 @@ BASE_URL = 'https://api.telegram.org/bot' + TOKEN + '/'
 BOT_NAME = 'chntybot'
 Config = ConfigParser.ConfigParser()
 Config.read("userids.ini")
-master_id = Config.get('MasterId', 'master')
-friends = Config.get('UserIds' , 'friends').split()
+master_id = int(Config.get('MasterId', 'master'))
+friends = Config.get('UserIds', 'friends').split()
 
 
 class Subscriber(ndb.Model):
@@ -83,15 +83,26 @@ def add_phrase(phrase, poster_id, name):
 def choose_phrase():
     all_phrase = Phrase.query().fetch()
     answer = ""
-    length_weight = 2
+    tell_length_weight = 1
 
     for phrase in all_phrase:
-        if random.randint(0, phrase.count*length_weight) == 1:
+        phrase_length_weight = int(len(str(phrase.phrase))/10)+1
+        words_in_phrase = len(phrase.phrase.split())
+        if random.randint(0, phrase.count*tell_length_weight*phrase_length_weight * words_in_phrase) == 1:
             answer += " " + phrase.phrase
-            length_weight += 2
+            tell_length_weight += 1
             phrase.count += 1
             phrase.put()
+    if answer == "":
+        answer = 'derp'
     return answer
+
+
+def choose_challenge():
+    if random.randint(0, 2) == 1:
+        return 'iuoa e kcet lheiny wirlwfrb nriswr opc  ihr hywudcos hsoe orase sbiasoe. y letiap,eo ot .unr dhr'
+    else:
+        return 'What are advantages and disadvantages of  KAME IPsec-Utilities  and OpenVPN'
 
 
 def what_did_he_say(name):
@@ -195,10 +206,17 @@ class WebHookHandler(webapp2.RequestHandler):
         self.response.write(json.dumps(body))
 
         # update_id = body['update_id']
-        message = body['message']
+        if 'edited_message' in body:
+            message = body['edited_message']
+        elif 'message' in body:
+            message = body['message']
+        else:
+            return
         # message_id = message.get('message_id')
         # date = message.get('date')
         text = message.get('text')
+        if text is None:
+            return
         text = text.encode('ascii', 'ignore')
         fr = message.get('from')
         user_id = fr['id']
@@ -210,17 +228,28 @@ class WebHookHandler(webapp2.RequestHandler):
             logging.info('no text')
             return
 
-        def reply(msg=None):
+        def reply(msg=None, keyboard=False):
             if msg:
                 msg = xkcd_substitutions(msg)
                 if configg.iscow:
                     msg = cow_speech(msg)
-                resp = urlopen(BASE_URL + 'sendMessage', urlencode({
-                    'chat_id': str(chat_id),
-                    'text': msg.encode('utf-8'),
-                    'parse_mode': 'HTML',
-                    'disable_web_page_preview': 'true',
-                })).read()
+                if False:
+                    reply_markup = {'keyboard': [['good'], ['bad']], 'resize_keyboard': True, 'one_time_keyboard': True}
+                    reply_markup = json.dumps(reply_markup)
+                    resp = urlopen(BASE_URL + 'sendMessage', urlencode({
+                        'chat_id': str(chat_id),
+                        'text': msg.encode('utf-8'),
+                        'reply_markup': reply_markup,
+                        'parse_mode': 'HTML',
+                        'disable_web_page_preview': 'true',
+                    })).read()
+                else:
+                    resp = urlopen(BASE_URL + 'sendMessage', urlencode({
+                        'chat_id': str(chat_id),
+                        'text': msg.encode('utf-8'),
+                        'parse_mode': 'HTML',
+                        'disable_web_page_preview': 'true',
+                    })).read()
             else:
                 logging.error('no msg specified')
                 resp = None
@@ -238,12 +267,16 @@ class WebHookHandler(webapp2.RequestHandler):
             elif text == '/help':
                 reply('nope')
             elif text == '/tell':
-                reply(choose_phrase())
+                reply(choose_phrase(), True)
             elif text == '/cow_on':
                 configg.iscow = True
             elif text == '/cow_off':
                 configg.iscow = False
-            if text == '/subscribe':
+            elif text == '/suggest':
+                reply('https://github.com/Chnty/talkbot/issues')
+            elif text == '/challenge':
+                reply(choose_challenge())
+            elif text == '/subscribe':
                 if add_subscriber(chat_id) == 1:
                     reply('Subscribed to chntybot!')
                 else:
@@ -274,13 +307,18 @@ class WebHookHandler(webapp2.RequestHandler):
             elif 'iswho' in text:
                 text = text[0:text.find('iswho')-1]
                 reply(str(what_did_he_say(text)))
+            elif 'add' in text:
+                text = text[0:text.find('add')-1]
+                add_phrase(text, user_id, username)
 
-        elif user_id in friends:
+        elif str(user_id) in friends:
             if 'memo' in text:
                 text = text[0:text.find('memo')]
                 add_memory(text, 2)
             elif 'say' in text:
                 reply(get_memory(2))
+            else:
+                add_phrase(text, user_id, username)
 
         else:
             add_phrase(text, user_id, username)
@@ -292,13 +330,14 @@ class ReminderHandler(webapp2.RequestHandler):
         all_subscriber = Subscriber.query(projection=["chat_id"], distinct=True)
         # send reminder message to every subscriber
         # care if to many subscribers -> limitations from telegram api
-        msg = choose_phrase()
+        msg = str(choose_phrase())
         for sub in all_subscriber:
             urlopen(BASE_URL + 'sendMessage', urlencode({
-                'chat_id': sub,
+                'chat_id': str(sub.chat_id),
                 'text': msg.encode('utf-8'),
                 'disable_web_page_preview': 'true',
             })).read()
+
 
 app = webapp2.WSGIApplication([
     ('/', MainHandler),
