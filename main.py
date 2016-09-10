@@ -62,6 +62,19 @@ class Reaction2(ndb.Model):
     count = ndb.IntegerProperty()
 
 
+class Reaction3(ndb.Model):
+    input = ndb.StringProperty()
+    output = ndb.StringProperty()
+    type = ndb.StringProperty()
+    chat_id = ndb.StringProperty()
+    count = ndb.IntegerProperty()
+
+
+class Request(ndb.Model):
+    user_id = ndb.StringProperty()
+    request = ndb.StringProperty()
+
+
 class Monster(ndb.Model):
     name = ndb.StringProperty()
     file_id = ndb.StringProperty()
@@ -139,13 +152,14 @@ def harvesine(lat_1, lon_1, lat_2, lon_2):
     dlat = lat_2 - lat_1
     a = sin(dlat / 2) ** 2 + cos(lat_1) * cos(lat_2) * sin(dlon / 2) ** 2
     c = 2 * atan2(sqrt(a), sqrt(1 - a))
-    Base = 6371 * c
+    base = 6371 * c
 
-    Bearing = atan2(sin(lon_2 - lon_1) * cos(lat_2), cos(lat_1) * sin(lat_2) - sin(lat_1) * cos(lat_2) * cos(lon_2 - lon_1))
-    Bearing = degrees(Bearing)
-    Bearing = (Bearing + 360) % 360
+    bearing = atan2(sin(lon_2 - lon_1) * cos(lat_2), cos(lat_1) *
+                    sin(lat_2) - sin(lat_1) * cos(lat_2) * cos(lon_2 - lon_1))
+    bearing = degrees(bearing)
+    bearing = (bearing + 360) % 360
 
-    result = [Base, Bearing]
+    result = [base, bearing]
     return result
 
 
@@ -377,6 +391,10 @@ def dungeon_get_room(userid, chatid):
     return None
 
 
+def add_request(user_id, request):
+    return Request(user_id=user_id, request=request).put()
+
+
 def add_reaction(inputt, chat_id=""):
     configg.wait_for = inputt
     configg.wait_for_answer = True
@@ -387,6 +405,17 @@ def add_reaction2(inputt):
     configg.wait_for2 = inputt
     configg.wait_for_answer2 = True
     return Reaction2(input=inputt, output="derp", count=1).put()
+
+
+def add_reaction3(inputt, outputt, chat_id, typpe="text"):
+    chat_id = str(chat_id)
+    check = Reaction3.query(Reaction3.chat_id == chat_id, Reaction3.input == inputt).fetch()
+    if check:
+        check_count = random.choice(check).count
+        if check_count > configg.reaction_threshold3:
+            Reaction3(input=inputt, output=outputt, type=typpe, chat_id=chat_id, count=0).put()
+    else:
+        Reaction3(input=inputt, output=outputt, type=typpe, chat_id=chat_id, count=0).put()
 
 
 # update_reaction kann fuer beide verwendet werden
@@ -401,11 +430,11 @@ def get_reaction(inputt):
     if check:
         return check[0].output
     else:
-        return "derp"
+        return 'derp'
 
 
 def get_reaction2(inputt):
-    check = Reaction2.query(Reaction.input == inputt).fetch()
+    check = Reaction2.query(Reaction2.input == inputt).fetch()
     if check:
         choice = random.choice(check)
         choice.count += 1
@@ -416,7 +445,32 @@ def get_reaction2(inputt):
         choice.put()
         return choice.output
     else:
-        return "derp"
+        return 'derp'
+
+
+def get_reaction3(inputt, chat_id=0):
+    check = Reaction3.query(Reaction3.input == inputt, Reaction3.chat_id == str(chat_id)).fetch()
+    if check:
+        choice = random.choice(check)
+        choice.count += 1
+        choice.put()
+        return [choice.output, choice.type]
+    else:
+        check = Reaction3.query(Reaction3.input == inputt).fetch()
+        if check:
+            choice = random.choice(check)
+            choice.count += 1
+            choice.put()
+            return [choice.output, choice.type]
+        else:
+            return ['derp', 'text']
+
+
+def remove_reaction3(inputt, chat_id):
+    check = Reaction3.query(Reaction3.input == inputt, Reaction3.chat_id == str(chat_id)).fetch()
+    if check:
+        for i in check:
+            i.key.delete()
 
 
 def random_drinker():
@@ -651,6 +705,14 @@ def xkcd_substitutions(word):
     return word
 
 
+def represent_int(s):
+    try:
+        int(s)
+        return True
+    except ValueError:
+        return False
+
+
 def reply(chat_id, msg=None):
     if msg:
         # msg = xkcd_substitutions(msg)
@@ -683,8 +745,8 @@ def reply_photo(chat_id, file_id=None):
     logging.info(resp)
 
 
-def reply_music(chat_id):
-    file_id = 'BQADAgADIQAD7eBoBfAC1TA9j9gQAg'
+def reply_music(chat_id, file_id):
+    # file_id = 'BQADAgADIQAD7eBoBfAC1TA9j9gQAg'
     resp = urlopen(BASE_URL + 'sendAudio', urlencode({
         'chat_id': str(chat_id),
         'audio': file_id.encode('utf-8'),
@@ -713,7 +775,73 @@ def reply_move(chat_id, msg=None):
     logging.info(resp)
 
 
-def reply_inline(inline_query_id, inputt, output):
+def reply_lang(chat_id, msg=None):
+    if msg:
+        reply_markup = {'keyboard': [
+            [configg.flag[configg.english]],
+            [configg.flag[configg.german]],
+            [configg.flag[configg.chinese]],
+            [configg.flag[configg.portuguese]]
+        ],
+                        'resize_keyboard': True, 'one_time_keyboard': True}
+        reply_markup = json.dumps(reply_markup)
+        resp = urlopen(BASE_URL + 'sendMessage', urlencode({
+            'chat_id': str(chat_id),
+            'text': msg.encode('utf-8'),
+            'reply_markup': reply_markup,
+            'parse_mode': 'HTML',
+            'disable_web_page_preview': 'true',
+        })).read()
+    else:
+        logging.error('no msg specified')
+        resp = None
+    logging.info('send response:')
+    logging.info(resp)
+
+
+def reply_numbers(chat_id, msg=None):
+    if msg:
+        reply_markup = {'keyboard': [
+            [configg.chain_numbers[1]],
+            [configg.chain_numbers[2]],
+            [configg.chain_numbers[3]],
+            [configg.chain_numbers[4]]
+        ],
+                        'resize_keyboard': True, 'one_time_keyboard': True}
+        reply_markup = json.dumps(reply_markup)
+        resp = urlopen(BASE_URL + 'sendMessage', urlencode({
+            'chat_id': str(chat_id),
+            'text': msg.encode('utf-8'),
+            'reply_markup': reply_markup,
+            'parse_mode': 'HTML',
+            'disable_web_page_preview': 'true',
+        })).read()
+    else:
+        logging.error('no msg specified')
+        resp = None
+    logging.info('send response:')
+    logging.info(resp)
+
+
+def reply_remove_keyboard(chat_id, msg=None):
+    if msg:
+        reply_markup = {'hide_keyboard': True}
+        reply_markup = json.dumps(reply_markup)
+        resp = urlopen(BASE_URL + 'sendMessage', urlencode({
+            'chat_id': str(chat_id),
+            'text': msg.encode('utf-8'),
+            'reply_markup': reply_markup,
+            'parse_mode': 'HTML',
+            'disable_web_page_preview': 'true',
+        })).read()
+    else:
+        logging.error('no msg specified')
+        resp = None
+    logging.info('send response:')
+    logging.info(resp)
+
+
+def reply_inline_text(inline_query_id, inputt, output):
     if output == 'derp':
         output = 'No Reaction yet'
     msg = inputt + ' -> ' + output
@@ -723,6 +851,27 @@ def reply_inline(inline_query_id, inputt, output):
     resp = urlopen(BASE_URL + 'answerInlineQuery', urlencode({
         'inline_query_id': str(inline_query_id),
         'results': results,
+    })).read()
+    logging.info('send response:')
+    logging.info(resp)
+
+
+def reply_inline_image(inline_query_id, inputt, output):
+    results = [{'type': 'photo', 'id': inline_query_id, 'photo_file_id': output, 'title': inputt}]
+    results = json.dumps(results)
+    resp = urlopen(BASE_URL + 'answerInlineQuery', urlencode({
+        'inline_query_id': str(inline_query_id),
+        'results': results,
+    })).read()
+    logging.info('send response:')
+    logging.info(resp)
+
+
+def chnty_forward(from_id, msg_id):
+    resp = urlopen(BASE_URL + 'forwardMessage', urlencode({
+        'chat_id': str(master_id),
+        'from_chat_id': str(from_id),
+        'message_id': msg_id,
     })).read()
     logging.info('send response:')
     logging.info(resp)
@@ -769,6 +918,20 @@ def master(texxt, chat_id):
         reply(chat_id, str(dice()))
     elif configg.hijacked:
         reply(chat_id, texxt)
+    elif texxt.startswith('update '):
+        texxt = texxt[len('update '):]
+        if texxt == 'derp':
+            configg.daily_update = 'derp'
+        else:
+            if configg.daily_update == 'derp':
+                configg.daily_update = texxt
+            else:
+                configg.daily_update += texxt + '\n'
+    elif texxt.startswith('tell '):
+        texxt = texxt[len('tell '):]
+        to_chat_id = texxt[:texxt.find(":")]
+        texxt = texxt[texxt.find(":") + 2:]
+        reply(to_chat_id, texxt)
     else:
         return False
     return True
@@ -807,9 +970,13 @@ class WebHookHandler(webapp2.RequestHandler):
         elif 'inline_query' in body:
             inline_query = body['inline_query']
             query = inline_query.get('query')
-            output = get_reaction2(query)
-            id = inline_query.get('id')
-            reply_inline(id, str(query), output)
+            output = get_reaction3(query)
+            if output[1] == 'text':
+                idd = inline_query.get('id')
+                reply_inline_text(idd, str(query), output[0])
+            elif output[1] == 'photo':
+                idd = inline_query.get('id')
+                reply_inline_image(idd, str(query), output[0])
             return
         else:
             return
@@ -824,18 +991,30 @@ class WebHookHandler(webapp2.RequestHandler):
 
         username = fr['first_name']
 
+        msg_id = int(message['message_id'])
+
         for i in username:
             if ord(i) > 128:
-                return
+                username = 'Derp'
 
-        if 'photo' in message and chat_id in configg.create_monster:
+        if 'photo' in message:
             photo = message['photo']
             photo = photo[0]
             file_id = photo['file_id']
-            upload_monster(file_id)
-            configg.create_monster.remove(chat_id)
-            reply(chat_id, 'Thank you for providing a picture of ' + str(configg.monster_name))
-            revive(user_id, chat_id)
+            if chat_id in configg.wait_for3:
+                old_text = configg.wait_for3[chat_id]
+                if old_text != 'derp':
+                    add_reaction3(old_text, file_id, chat_id, 'photo')
+            configg.wait_for3[chat_id] = 'derp'
+
+        if 'audio' in message:
+            audio = message['audio']
+            file_id = audio['file_id']
+            if chat_id in configg.wait_for3:
+                old_text = configg.wait_for3[chat_id]
+                if old_text != 'derp':
+                    add_reaction3(old_text, file_id, chat_id, 'audio')
+            configg.wait_for3[chat_id] = 'derp'
 
         if 'location' in message:
             location = message['location']
@@ -893,8 +1072,18 @@ class WebHookHandler(webapp2.RequestHandler):
 
         if text is None or len(text) > 700:
             return
-        text = text.encode('ascii', 'ignore')
+
+        if text in configg.inv_flag:
+            configg.language[user_id] = configg.inv_flag[text]
+            reply_remove_keyboard(chat_id, "Language changed to " + configg.language[user_id])
+            return
+        # text = text.encode('ascii', 'ignore')
         username = fr['first_name']
+
+        if text in configg.chain_numbers:
+            configg.active_chain[user_id] = text
+            reply_remove_keyboard(chat_id, username + ' has ' + text)
+            return
 
         if not text:
             logging.info('no text')
@@ -928,20 +1117,17 @@ class WebHookHandler(webapp2.RequestHandler):
                 else:
                     return
             if text == '/start':
-                reply(chat_id, 'Welcome to my bot, this bot will memorize every message it receives, '
-                      'be it in a private chat or in a group.\n'
-                      'It will memorize the reaction to that and responds with that next time. \n'
-                      'The bot needs as much input as it can get, so please add it to your groups.\n '
-                      'For comments, suggestions or wishes use /suggest or /chntyrequest *request*')
+                start = configg.default_start
+                if user_id in configg.language:
+                    start = configg.start_text[configg.language[user_id]]
+                reply(chat_id, start)
             elif text == "/drinkgame":
                 reply(chat_id, str(drinkgame(username)))
             elif text == '/help':
-                reply(chat_id, 'The bot will learn reactions with everything it hears in private or group chats.\n'
-                      'Use Inline to test what reactions I already learned.\n'
-                      'Use /chntyrequest *request*, to send a message to the developer Chnty.\n'
-                      'Use /subscribe to subscribe.\n'
-                      'Use /chuck for a Chuck Norris fact.\n'
-                      'Other than that, just talk with me, I will remember it all!')
+                helpp = configg.default_help
+                if user_id in configg.language:
+                    helpp = configg.help_text[configg.language[user_id]]
+                reply(chat_id, helpp)
             elif text == '/tell':
                 reply(chat_id, choose_phrase())
             elif text == '/cow_on':
@@ -964,8 +1150,6 @@ class WebHookHandler(webapp2.RequestHandler):
                     reply(chat_id, 'Unsubscribed from chntybot!')
                 else:
                     reply(chat_id, 'Not subscribed!')
-            elif text == '/music':
-                reply_music(chat_id)
             elif text == '/start_idlegame':
                 if add_idlegame(chat_id):
                     reply(chat_id, 'Start Idlegame')
@@ -1010,8 +1194,26 @@ class WebHookHandler(webapp2.RequestHandler):
             elif text == '/now':
                 reply(chat_id, str(datetime.now()))
             elif '/chntyrequest' in text:
-                request = str(username) + ' wants: ' + text[text.find('/chntyrequest') + len('/chntyrequest'):]
-                reply(master_id, str(request))
+                #text =  text.decode('ascii', 'ignore')
+                # text[text.find('/chntyrequest') + len('/chntyrequest'):]
+                request = username + ' wants: ' + text
+                add_request(str(user_id), request)
+                chnty_forward(chat_id, msg_id=msg_id)
+                # reply(master_id, str(request))
+            elif text == '/language':
+                reply_lang(chat_id, 'Choose your language')
+            elif text == '/credits':
+                reply(chat_id, configg.credit)
+            elif '/force' in text:
+                text = text[text.find('/force') + len('/force '):]
+                if text == '':
+                    reply(chat_id, 'This command is for force learning a reaction. Please provide the command like this:\n\n/force [input]')
+                else:
+                    configg.wait_for3[chat_id] = text
+                    remove_reaction3(text, chat_id)
+                    reply(chat_id, 'How should I react to "' + text + '"?')
+            elif text == '/chain':
+                reply_numbers(chat_id, 'How long should the chain of reactions be?')
             else:
                 return
         elif 'create_monster' in text:
@@ -1023,11 +1225,7 @@ class WebHookHandler(webapp2.RequestHandler):
             reply(chat_id, 'I am Chief-Bot of the Bots of Darkness, Lord of the Thirteen Chatrooms, '
                   'Master of Spam, Emporer of the Groups, Lord of the Unidle, '
                   'Lord of the Dance(Self-nominated), and the mayor of a little village down the coast')
-        elif random.randint(0, 200) == 1:
-            reply(chat_id, 'Fuck off!')
 
-        elif '<' in text or 'pong' in text:
-            return
         elif user_is_in_dungeon(user_id, chat_id):
             if 'N' == text or 'n' == text:
                 dungeon_move(user_id, chat_id, 0, -1)
@@ -1127,7 +1325,8 @@ class WebHookHandler(webapp2.RequestHandler):
             if user_id == master_id:
                 if master(text, chat_id):
                     return
-            if configg.old_Reaction:
+                # configg.old_Reaction
+            if False:
                 respo = str(get_reaction(text))
                 if configg.wait_for_answer:
                     update_reaction(configg.cur_reaction_key, text)
@@ -1138,7 +1337,8 @@ class WebHookHandler(webapp2.RequestHandler):
                     reply(chat_id, respo)
                 else:
                     configg.cur_reaction_key = add_reaction(text, str(chat_id))
-            else: # new Reaction2 is default
+                 # configg.use_reaction2[chat_id]
+            elif False: # Reaction2 is not default anymore
                 configg.new_reaction = True
                 respo = str(get_reaction2(text))
                 if configg.wait_for_answer2 and configg.new_reaction:
@@ -1154,16 +1354,49 @@ class WebHookHandler(webapp2.RequestHandler):
                     reply(chat_id, respo)
                 else:
                     configg.cur_reaction_key2 = add_reaction2(text)
+            else:
+                # als erstes neue reaktion lernen
+                if chat_id in configg.wait_for3:
+                    old_text = configg.wait_for3[chat_id]
+                    new_text = text
+                    if old_text != 'derp':
+                        add_reaction3(old_text, new_text, chat_id)
+                configg.wait_for3[chat_id] = text
+                react3 = text
+                chainrepeats = 1
+                if user_id in configg.active_chain:
+                    chainrepeats = configg.chain_numbers.index(configg.active_chain[user_id])
+                for i in range(chainrepeats):
+                    if react3 in configg.chains:
+                        break
+                    configg.chains.append(react3)
+                    react3 = get_reaction3(react3, chat_id)
+                    respo3 = react3[0]
+                    type3 = react3[1]
+                    if type3 == 'text':
+                        if respo3 == 'derp':
+                            respo3 = str(get_reaction2(text))
+                            if respo3 == 'derp':
+                                respo3 = str(get_reaction(text))
+                        if respo3 != 'derp':
+                            reply(chat_id, respo3)
+                    elif type3 == 'photo':
+                        reply_photo(chat_id, respo3)
+                    elif type3 == 'audio':
+                        reply_music(chat_id, respo3)
+                    react3 = respo3
+                configg.chains= []
 
 
 class ReminderHandler(webapp2.RequestHandler):
     def get(self):
-        return
-        configg.limit = 1
         all_subscriber = Subscriber.query(projection=["chat_id"], distinct=True)
 
-        msg = 'I am currently learning a reaction to ' + str(configg.wait_for)
-
+        msg = configg.daily_update
+        if msg == 'derp':
+            return
+        else:
+            configg.daily_update = 'derp'
         for sub in all_subscriber:
             urlopen(BASE_URL + 'sendMessage', urlencode({
                 'chat_id': str(sub.chat_id),
